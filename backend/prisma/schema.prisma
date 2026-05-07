@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Configuracion {
+  id              Int     @id @default(autoincrement())
+  nombreNegocio   String  @default("Mi Restaurante")
+  mesasSalon      Int     @default(10)
+  sillasBarra     Int     @default(8)
+  cargoServicio   Float   @default(10)
+}
+
+model Mesa {
+  id        Int      @id @default(autoincrement())
+  numero    Int      @unique
+  zona      String   @default("salon")
+  estado    String   @default("libre")
+  posX      Float    @default(0)
+  posY      Float    @default(0)
+  createdAt DateTime @default(now())
+  ordenes   Orden[]
+}
+
+model Cliente {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  telefono  String?
+  deuda     Float    @default(0)
+  createdAt DateTime @default(now())
+  ordenes   Orden[]
+}
+
+model Producto {
+  id         Int         @id @default(autoincrement())
+  nombre     String
+  precio     Float
+  categoria  String
+  disponible Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  items      ItemOrden[]
+}
+
+model Orden {
+  id             Int         @id @default(autoincrement())
+  tipo           String      @default("mesa")
+  zona           String      @default("salon")
+  estado         String      @default("abierta")
+  cliente        String?
+  metodoPago     String?
+  cargoServicio  Float       @default(0)
+  descuento      Float       @default(0)
+  total          Float       @default(0)
+  clienteId      Int?
+  clienteFiado   Cliente?    @relation(fields: [clienteId], references: [id])
+  mesaId         Int?
+  mesa           Mesa?       @relation(fields: [mesaId], references: [id])
+  items          ItemOrden[]
+  createdAt      DateTime    @default(now())
+  cerradaAt      DateTime?
+}
+
+model ItemOrden {
+  id         Int      @id @default(autoincrement())
+  cantidad   Int
+  precio     Float
+  ordenId    Int
+  orden      Orden    @relation(fields: [ordenId], references: [id])
+  productoId Int
+  producto   Producto @relation(fields: [productoId], references: [id])
+}

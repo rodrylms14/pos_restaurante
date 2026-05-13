@@ -68,6 +68,7 @@ model ItemOrden {
   id         Int      @id @default(autoincrement())
   cantidad   Int
   precio     Float
+  pagado     Boolean  @default(false)
   ordenId    Int
   orden      Orden    @relation(fields: [ordenId], references: [id])
   productoId Int

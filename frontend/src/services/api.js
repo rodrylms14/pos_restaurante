@@ -25,6 +25,8 @@ export const eliminarItem = (ordenId, itemId) => api.delete(`/ordenes/${ordenId}
 export const aplicarDescuento = (ordenId, descuento) => api.put(`/ordenes/${ordenId}/descuento`, { descuento })
 export const cerrarOrden = (ordenId, data) => api.put(`/ordenes/${ordenId}/cerrar`, data)
 export const cancelarOrden = (ordenId) => api.put(`/ordenes/${ordenId}/cancelar`)
+export const pagarItems = (ordenId, data) => api.put(`/ordenes/${ordenId}/pagar-items`, data)
+export const getOrden = (id) => api.get(`/ordenes/${id}`)
 
 // Clientes
 export const getClientes = () => api.get('/clientes')

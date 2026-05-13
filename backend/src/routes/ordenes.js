@@ -55,6 +55,7 @@ router.post('/', async (req, res) => {
 })
 
 // Agregar producto a una orden
+// Agregar producto a una orden
 router.post('/:id/items', async (req, res) => {
   try {
     const { id } = req.params
@@ -73,6 +74,19 @@ router.post('/:id/items', async (req, res) => {
       }
     })
 
+    // Marcar la mesa como ocupada al agregar el primer producto
+    const orden = await prisma.orden.findUnique({
+      where: { id: parseInt(id) },
+      include: { items: true }
+    })
+
+    if (orden.mesaId && orden.items.length === 1) {
+      await prisma.mesa.update({
+        where: { id: orden.mesaId },
+        data: { estado: 'ocupada' }
+      })
+    }
+
     await recalcularTotal(parseInt(id))
     res.json(item)
   } catch (error) {
@@ -84,11 +98,44 @@ router.post('/:id/items', async (req, res) => {
 router.delete('/:id/items/:itemId', async (req, res) => {
   try {
     const { id, itemId } = req.params
-    await prisma.itemOrden.delete({
+
+    const item = await prisma.itemOrden.findUnique({
       where: { id: parseInt(itemId) }
     })
+
+    if (item.cantidad > 1) {
+      await prisma.itemOrden.update({
+        where: { id: parseInt(itemId) },
+        data: { cantidad: item.cantidad - 1 }
+      })
+    } else {
+      await prisma.itemOrden.delete({
+        where: { id: parseInt(itemId) }
+      })
+    }
+
     await recalcularTotal(parseInt(id))
-    res.json({ mensaje: 'Item eliminado' })
+
+    // Si no quedan items, cancelar orden y liberar mesa
+    const itemsRestantes = await prisma.itemOrden.findMany({
+      where: { ordenId: parseInt(id) }
+    })
+
+    if (itemsRestantes.length === 0) {
+      const orden = await prisma.orden.update({
+        where: { id: parseInt(id) },
+        data: { estado: 'cancelada', cerradaAt: new Date() }
+      })
+      if (orden.mesaId) {
+        await prisma.mesa.update({
+          where: { id: orden.mesaId },
+          data: { estado: 'libre' }
+        })
+      }
+      return res.json({ mensaje: 'Orden cancelada, mesa liberada', mesaLiberada: true })
+    }
+
+    res.json({ mensaje: 'Item actualizado', mesaLiberada: false })
   } catch (error) {
     res.status(500).json({ error: 'Error al eliminar item' })
   }
@@ -192,5 +239,65 @@ async function recalcularTotal(ordenId) {
     data: { total: conCargo }
   })
 }
+
+// Marcar items como pagados (pago parcial por consumo)
+router.put('/:id/pagar-items', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { itemIds, metodoPago } = req.body
+
+    // Marcar los items seleccionados como pagados
+    await prisma.itemOrden.updateMany({
+      where: { id: { in: itemIds } },
+      data: { pagado: true }
+    })
+
+    // Verificar si quedan items sin pagar
+    const itemsPendientes = await prisma.itemOrden.findMany({
+      where: { ordenId: parseInt(id), pagado: false }
+    })
+
+    // Si no quedan items pendientes cerramos la orden completa
+    if (itemsPendientes.length === 0) {
+      const orden = await prisma.orden.update({
+        where: { id: parseInt(id) },
+        data: { estado: 'cerrada', metodoPago, cerradaAt: new Date() }
+      })
+      if (orden.mesaId) {
+        await prisma.mesa.update({
+          where: { id: orden.mesaId },
+          data: { estado: 'libre' }
+        })
+      }
+      return res.json({ cerrada: true, orden })
+    }
+
+    // Recalcular total con items pendientes
+    await recalcularTotal(parseInt(id))
+    res.json({ cerrada: false, pendientes: itemsPendientes.length })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al pagar items' })
+  }
+})
+
+// Obtener detalle de una orden por id (para ticket)
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    const orden = await prisma.orden.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        items: {
+          include: { producto: true }
+        },
+        mesa: true,
+        clienteFiado: true
+      }
+    })
+    res.json(orden)
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener orden' })
+  }
+})
 
 module.exports = router
